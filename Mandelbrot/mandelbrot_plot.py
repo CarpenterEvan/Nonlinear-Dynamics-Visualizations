@@ -66,8 +66,7 @@ def plot_brot(escape_time_matrix, extent:list=None, cmap:str="inferno", norm=Pow
 	'''
 	plt.figure()
 	plt.imshow(escape_time_matrix, interpolation="spline36", extent=extent, cmap=cmap, norm=norm)
-	plt.gca().set_aspect("equal")
-	plt.tight_layout()
+
 	plt.show()
 	# I don't want to save the image with the axes.
 	plt.axis('off')
@@ -81,7 +80,7 @@ def main(resolve:bool):
 	rad = 0.5
 	
 	N_iterations = 250
-	pixel_density = 10000
+	pixel_density = 1000
 	
 
 
