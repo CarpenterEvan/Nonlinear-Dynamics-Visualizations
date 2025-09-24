@@ -1,13 +1,16 @@
+import os
 import numpy as np
-from pathlib import Path	
 import matplotlib.pyplot as plt
 from matplotlib.colors import PowerNorm, LogNorm
 from multiprocessing import Pool
+from pathlib import Path	
+
+
 def get_starting_matrix(x_i:float, y_i:float, box_radius:float=1,
                  pixel_density:int=512) -> np.ndarray:
 	'''
 	Create a complex matrix centered at (x_i, y_i) extending to box_radius in each direction.
-	The matrix shape is (pixeldensity, pixeldensity).
+	The matrix will have pixel_density^2 total elements.
 	'''
 	global window
 	x_min = x_i - box_radius
@@ -19,9 +22,8 @@ def get_starting_matrix(x_i:float, y_i:float, box_radius:float=1,
 	re = np.linspace(x_min, x_max, pixel_density, dtype=np.float64)
 	im = np.linspace(y_min, y_max, pixel_density, dtype=np.float64)
     
-	c_matrix = re[np.newaxis,:] + (im[:,np.newaxis] * 1j)
-	return c_matrix
-
+	starting_matrix = re[np.newaxis,:] + (im[:,np.newaxis] * 1j)
+	return starting_matrix
 
 def escape_time_for_row(args):
 		c_row, N_iterations = args
@@ -43,53 +45,39 @@ def escape_time_for_row(args):
 			escape_time_row[(mask) & (condition1) & (condition2)] = iteration
 
 		return escape_time_row
-
-def in_mandelbrot(c:np.ndarray, N_iterations:int=20) -> np.ndarray:
-	'''
-	Determine the "escape time" for each point in the complex matrix c. 
-	Escape time is how many iterations the point takes to exceed an absolute value of 2.
-	'''
-
-	escape_time_matrix = np.zeros_like(c, dtype=int)
-
-	for i in range(c.shape[1]):
-		c_row = c[i]
-
-		args = (c_row, N_iterations)
-		escape_time_matrix[i] = escape_time_for_row(args)
-
-	return escape_time_matrix
-
-def plot_brot(escape_time_matrix, extent:list=None, cmap:str="inferno", norm=PowerNorm(1), filename:str=f"test.png"):
+	
+def plot_brot(escape_time_matrix, show:bool=True, extent:list=None, cmap:str="inferno", norm=PowerNorm(1), filename:Path=Path("test.png")):
 	'''
 	Plotting commands for the Mandelbrot set
 	'''
 	plt.figure()
 	plt.imshow(escape_time_matrix, interpolation="spline36", extent=extent, cmap=cmap, norm=norm)
-
-	plt.show()
+	plt.gca().set_aspect("equal")
+	plt.tight_layout()
+	if show:
+		plt.show()
 	# I don't want to save the image with the axes.
 	plt.axis('off')
-	plt.imsave(f"{Path(__file__).parent}/Saved/{filename}", escape_time_matrix, cmap=cmap)
 
-def main(resolve:bool):
-	from time import time
-	x_i, y_i = 0,0
-	
-	#-0.8181285, 0.20082240 # near a spiral
+	if os.path.exists(filename.parent):
+		plt.imsave(filename, escape_time_matrix, cmap=cmap)
+	else:
+		print(f"Dir not found\nmkdir -p {filename.parent}")
+		os.system(f"mkdir -p {filename.parent}")
+		plt.imsave(filename, escape_time_matrix, cmap=cmap)
+	plt.close()
 
-	y_i = -y_i
-	rad = 2
-	
-	N_iterations = 25
-	pixel_density = 3_000
-	
+def in_mandelbrot(x_i:float, y_i:float, box_radius:float=1,
+                 pixel_density:int=512, N_iterations:int=20, usePool:bool=True) -> np.ndarray:
+	'''
+	Determine the "escape time" for each point in the complex matrix c. 
+	Escape time is how many iterations the point takes to exceed an absolute value of 2.
+	'''
+	starting_matrix = get_starting_matrix(x_i=x_i, y_i=y_i, box_radius=box_radius, pixel_density=pixel_density)
+	c = starting_matrix
+	escape_time_matrix = np.zeros_like(c, dtype=int)
 
-
-	start = time()
-	starting_matrix = get_starting_matrix(x_i, y_i, box_radius=rad, pixel_density=pixel_density)
-	parallel=True
-	if parallel:
+	if usePool:
 		with Pool() as pool:
 			escape_time_matrix_rows = pool.map(
 				escape_time_for_row,
@@ -97,13 +85,86 @@ def main(resolve:bool):
 			)
 		escape_time_matrix = np.array(escape_time_matrix_rows)
 	else:
-		in_mandelbrot(c=starting_matrix, N_iterations=N_iterations)
-	print(f"Time elapsed: {time()-start:.2f} sec")
+		for i in range(c.shape[1]):
+			c_row = c[i]
+			args = (c_row, N_iterations)
+			escape_time_matrix[i] = escape_time_for_row(args)
 
-	file_name = f"{x_i}_{y_i}_rad{rad}_pixden{pixel_density}_Niter{N_iterations}.png"
-	plot_brot(escape_time_matrix=escape_time_matrix, extent=window, filename=file_name)
+	return escape_time_matrix
+
+def main(makeFrames:bool=False):
+	from time import time
+	x_i, y_i = -1.78, 0
+	# -0.8181285, 0.20082240 # near spiral, slightly too high
+	max_N_iterations = 700
+	max_pixel_density = 2_000
+	smallest_radius = 0.0001
+	largest_radius = 2
+
+	fps = 24
+	seconds = 10
+	N_frames = int(fps * seconds)
+
+	y_i = -y_i # so moving based on imshow coords is more intuitive
+	
+	Saved = Path(__file__).parent / Path("Saved")
+	
+	frames = np.arange(start=1,stop=201)
+
+
+	# Experimentally paramaterizing the radius, N_iterations, and pixel density from frames
+	# Starting with linear for all 3
+	radius_values = np.round(largest_radius / N_frames * frames,len(str(smallest_radius))+3)
+	pixel_density_values = (max_pixel_density - 2 * frames).astype(int)
+	N_iter_values = (max_N_iterations - 2.5 * frames).astype(int)
+
+	start = time()
+	if makeFrames:
+		subfolder = Saved / Path(f"frames/single_zoom/experiment/x{x_i}_y{y_i}")
+		loopstart = time()
+
+		for frame in frames:
+			index = frame-1
+			frame_label_index = N_frames-frame
+			radius = radius_values[index]
+			N_iterations = N_iter_values[index]
+			pixel_density = pixel_density_values[index]
+			
+			continue
+			start = time()
+			escape_time_matrix = in_mandelbrot(x_i=x_i, 
+									  		   y_i=y_i,
+									  		   box_radius=radius, 
+									  		   pixel_density=pixel_density, 
+									  		   N_iterations=N_iterations)
+			
+			print(f"{frame=: >3}/{N_frames: >3}\t{time()-start:.1f} seconds")
+
+			filename = subfolder / Path(f"frame{frame_label_index:0>4}.png")
+			plot_brot(escape_time_matrix=escape_time_matrix, extent=window, filename=filename, show=False)
+		
+		os.system(f"ffmpeg -r {fps}\
+					-f image2\
+					-s {pixel_density}x{pixel_density}\
+					-pattern_type glob\
+					-i '{subfolder}/*.png'\
+					-vcodec libx264\
+					-crf 18\
+					-pix_fmt yuv420p\
+					{subfolder}/mandelbrot_linear_parameterization.mp4")
+		print(f"Total time elapsed: {time()-loopstart:.1f} seconds")
+	else: 
+		escape_time_matrix = in_mandelbrot(x_i=x_i, 
+								  		   y_i=y_i,
+								  		   box_radius=smallest_radius, 
+								  		   pixel_density=pixel_density, 
+								  		   N_iterations=N_iterations)
+		
+		plot_brot(escape_time_matrix=escape_time_matrix, extent=window, show=True)
+
+	print(f"Time elapsed: {time()-start:.2f} sec")
+	
+
 
 if __name__ == "__main__":
-	
-	main(resolve=True)
-	
+	main(makeFrames=True)
