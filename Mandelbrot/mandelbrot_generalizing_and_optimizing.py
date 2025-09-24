@@ -2,7 +2,7 @@ import numpy as np
 from pathlib import Path	
 import matplotlib.pyplot as plt
 from matplotlib.colors import PowerNorm, LogNorm
-
+import os
 from multiprocessing import Pool
 import pickle
 
@@ -47,7 +47,7 @@ def escape_time_for_row(args):
 
 		return escape_time_row
 	
-def plot_brot(escape_time_matrix, extent:list=None, cmap:str="inferno", norm=PowerNorm(1), filename:str=f"test.png"):
+def plot_brot(escape_time_matrix, show:bool=True, extent:list=None, cmap:str="inferno", norm=PowerNorm(1), filename:Path=Path("test.png")):
 	'''
 	Plotting commands for the Mandelbrot set
 	'''
@@ -55,38 +55,71 @@ def plot_brot(escape_time_matrix, extent:list=None, cmap:str="inferno", norm=Pow
 	plt.imshow(escape_time_matrix, interpolation="spline36", extent=extent, cmap=cmap, norm=norm)
 	plt.gca().set_aspect("equal")
 	plt.tight_layout()
-	plt.show()
+	if show:
+		plt.show()
 	# I don't want to save the image with the axes.
 	plt.axis('off')
-	plt.imsave(f"{Path(__file__).parent}/Saved/{filename}", escape_time_matrix, cmap=cmap)
 
-def main(resolve:bool):
+	if os.path.exists(filename.parent):
+		plt.imsave(filename, escape_time_matrix, cmap=cmap)
+	else:
+		os.system(f"mkdir -p {filename.parent}")
+		plt.imsave(filename, escape_time_matrix, cmap=cmap)
+	plt.close()
+
+def in_mandelbrot(starting_matrix:np.ndarray, N_iterations:int=20, usePool:bool=True) -> np.ndarray:
+	'''
+	Determine the "escape time" for each point in the complex matrix c. 
+	Escape time is how many iterations the point takes to exceed an absolute value of 2.
+	'''
+	c = starting_matrix
+	escape_time_matrix = np.zeros_like(c, dtype=int)
+
+	if usePool:
+		with Pool() as pool:
+			escape_time_matrix_rows = pool.map(
+				escape_time_for_row,
+				[(starting_matrix[i, :], N_iterations) for i in range(starting_matrix.shape[0])]
+			)
+		escape_time_matrix = np.array(escape_time_matrix_rows)
+	else:
+		for i in range(c.shape[1]):
+			c_row = c[i]
+			args = (c_row, N_iterations)
+			escape_time_matrix[i] = escape_time_for_row(args)
+
+	return escape_time_matrix
+
+def main(makeFrames:bool=False):
 	from time import time
-	x_i, y_i = -0.755, 0.18
+	x_i, y_i = -0.8181285, 0.20082240
 
 	y_i = -y_i
-	rad = 0.05
-	
-	N_iterations = 1000
-	pixel_density = 2000
-	
+	N_iterations = 25
+	pixel_density = 2_000
+	N_frames = 100
+	fps = 10 
 
-
+	subfolder = Path(__file__).parent / Path(f"Saved/frames/zoom/pixden{pixel_density}_Niter{N_iterations}/x{x_i}_y{y_i}")
 	start = time()
-	starting_matrix = get_starting_matrix(x_i, y_i, box_radius=rad, pixel_density=pixel_density)
-	# c is the complex matrix, shape (pixeldensity, pixeldensity)
-	with Pool() as pool:
-		escape_time_matrix_rows = pool.map(
-			escape_time_for_row,
-			[(starting_matrix[i, :], N_iterations) for i in range(starting_matrix.shape[0])]
-		)
-	escape_time_matrix = np.array(escape_time_matrix_rows)
-	print(f"Time elapsed: {time()-start:.2f} sec")
+	if makeFrames:
+		for index, rad in enumerate(np.geomspace(0.01,2,N_frames)):
+			label_index = N_frames-index
+			print(f"{index=}\t{rad=}")
+			
+			
+			starting_matrix = get_starting_matrix(x_i, y_i, box_radius=rad, pixel_density=pixel_density)
+			escape_time_matrix = in_mandelbrot(starting_matrix=starting_matrix, N_iterations=N_iterations)
+			
 
-	file_name = f"{x_i}_{y_i}_rad{rad}_pixden{pixel_density}_Niter{N_iterations}"
-	plot_brot(escape_time_matrix=escape_time_matrix, extent=window, filename=file_name)
+			filename = subfolder / Path(f"frame{label_index:0>4}.png")
+			plot_brot(escape_time_matrix=escape_time_matrix, extent=window, filename=filename, show=False)
 	
+	print(f"Time elapsed: {time()-start:.2f} sec")
+	os.system(f"ffmpeg -r {fps} -f image2 -s {pixel_density}x{pixel_density} -pattern_type glob -i '{subfolder}/*.png' -vcodec libx264 -crf 18 -pix_fmt yuv420p {subfolder}/mandelbrot.mp4")
+
 
 if __name__ == "__main__":
-	main(resolve=True)
+	main(makeFrames=True)
+	
 	

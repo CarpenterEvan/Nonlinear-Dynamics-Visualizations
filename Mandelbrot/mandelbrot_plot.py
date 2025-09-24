@@ -74,25 +74,30 @@ def plot_brot(escape_time_matrix, extent:list=None, cmap:str="inferno", norm=Pow
 
 def main(resolve:bool):
 	from time import time
-	x_i, y_i = -0.755, 0.18
+	x_i, y_i = 0,0
+	
+	#-0.8181285, 0.20082240 # near a spiral
 
 	y_i = -y_i
-	rad = 0.5
+	rad = 2
 	
-	N_iterations = 250
-	pixel_density = 1000
+	N_iterations = 25
+	pixel_density = 3_000
 	
 
 
 	start = time()
 	starting_matrix = get_starting_matrix(x_i, y_i, box_radius=rad, pixel_density=pixel_density)
-	# c is the complex matrix, shape (pixeldensity, pixeldensity)
-	with Pool() as pool:
-		escape_time_matrix_rows = pool.map(
-			escape_time_for_row,
-			[(starting_matrix[i, :], N_iterations) for i in range(starting_matrix.shape[0])]
-		)
-	escape_time_matrix = np.array(escape_time_matrix_rows)
+	parallel=True
+	if parallel:
+		with Pool() as pool:
+			escape_time_matrix_rows = pool.map(
+				escape_time_for_row,
+				[(starting_matrix[i, :], N_iterations) for i in range(starting_matrix.shape[0])]
+			)
+		escape_time_matrix = np.array(escape_time_matrix_rows)
+	else:
+		in_mandelbrot(c=starting_matrix, N_iterations=N_iterations)
 	print(f"Time elapsed: {time()-start:.2f} sec")
 
 	file_name = f"{x_i}_{y_i}_rad{rad}_pixden{pixel_density}_Niter{N_iterations}.png"
