@@ -96,8 +96,8 @@ def main(makeFrames:bool=False):
 	from time import time
 	x_i, y_i = -1.78, 0
 	# -0.8181285, 0.20082240 # near spiral, slightly too high
-	max_N_iterations = 700
-	max_pixel_density = 2_000
+	max_N_iterations = 550
+	max_pixel_density = 1_500
 	smallest_radius = 0.0001
 	largest_radius = 2
 
@@ -109,18 +109,24 @@ def main(makeFrames:bool=False):
 	
 	Saved = Path(__file__).parent / Path("Saved")
 	
-	frames = np.arange(start=1,stop=201)
+	frames = np.arange(start=1,stop=N_frames+1)
 
 
 	# Experimentally paramaterizing the radius, N_iterations, and pixel density from frames
-	# Starting with linear for all 3
-	radius_values = np.round(largest_radius / N_frames * frames,len(str(smallest_radius))+3)
+	# TODO: Zoom for radius should be parameterized as exponential
+	# https://stackoverflow.com/questions/47818880/
+	
+	radius_values = np.geomspace(smallest_radius, largest_radius, N_frames)
+	if True:
+		import pandas as pd
+		to_copy = pd.DataFrame(radius_values).to_clipboard()
+		exit()
 	pixel_density_values = (max_pixel_density - 2 * frames).astype(int)
 	N_iter_values = (max_N_iterations - 2.5 * frames).astype(int)
 
 	start = time()
 	if makeFrames:
-		subfolder = Saved / Path(f"frames/single_zoom/experiment/x{x_i}_y{y_i}")
+		subfolder = Saved / Path(f"frames/single_zoom/experiment/x{x_i}_y{y_i}_geomspace_different_speeds")
 		loopstart = time()
 
 		for frame in frames:
@@ -130,7 +136,7 @@ def main(makeFrames:bool=False):
 			N_iterations = N_iter_values[index]
 			pixel_density = pixel_density_values[index]
 			
-			continue
+			
 			start = time()
 			escape_time_matrix = in_mandelbrot(x_i=x_i, 
 									  		   y_i=y_i,
