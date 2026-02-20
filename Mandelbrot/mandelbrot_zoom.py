@@ -6,6 +6,7 @@ from multiprocessing import Pool
 from pathlib import Path
 from time import time
 from PIL import Image
+import sys
 
 saved_folder = Path(__file__).parent / Path("Saved")
 
@@ -86,8 +87,7 @@ def map_ETM_to_image(escape_time_matrix,
 					 extent:list=None, 
 					 cmap:str="inferno", 
 					 norm=PowerNorm(0.5), 
-					 filename:Path=Path("test.png"), 
-					 Save:bool=False):
+					 filename:Path=Path("test.png")):
 	'''
 	Maps the escape time matrix (ETM) to an image using `matplotlib.pyplot.imshow`
 	'''
@@ -100,13 +100,12 @@ def map_ETM_to_image(escape_time_matrix,
 	# I don't want to save the image with the axes.
 	plt.axis('off')
 
-	if os.path.exists(filename.parent):
-		plt.imsave(filename, escape_time_matrix, cmap=cmap)
-	else:
-		print(f"Dir not found\nmkdir -p {filename.parent}")
-		os.system(f"mkdir -p {filename.parent}")
-	if Save and filename is not None:
-		print(f"Saving image at: {filename}")
+	if filename is not None:
+		if not os.path.exists(filename.parent):
+			print(f"Dir not found\nmkdir -p {filename.parent}")
+			os.system(f"mkdir -p {filename.parent}")
+		else:
+			plt.imsave(filename, escape_time_matrix, cmap=cmap)
 		plt.imsave(filename, escape_time_matrix, cmap=cmap)
 	plt.close()
 	return filename
@@ -127,14 +126,14 @@ def FFmpegCommand(subfolder:Path, fps:int=24, resolution:tuple=(1920,1800), Time
 						-f image2\
 						-s {resolution[0]}x{resolution[1]}\
 						-pattern_type glob\
-						-i '{subfolder}/*.png'\
+						-i '{subfolder}/frame*.png'\
 						-vcodec libx264\
 						-crf 18\
 						-pix_fmt yuv420p\
 						{subfolder}/mandelbrot_linear_parameterization.mp4"
 	os.system(ffmpeg_command)
 
-	if Timed():
+	if Timed:
 		FFmpeg_end_time = time()
 		print(f"\nTotal time elapsed by FFmpeg: {FFmpeg_end_time-FFmpeg_start_time:.1f} seconds")
 
@@ -150,9 +149,9 @@ def generate_video(show=False, Timed:bool=True, onlyFirstAndLastFrame:bool=False
 
 	# Zoom radius
 	zoom_from_radius = 2
-	zoom_to_radius = 200
+	zoom_to_radius = 3
 	resolution = (1500,1500)# (1920, 1080)# 1080p
-	seconds = 10
+	seconds = 5
 	fps = 4
 	N_frames = int(seconds * fps)
 	frames = np.arange(start=1,stop=N_frames+1)
@@ -172,10 +171,15 @@ def generate_video(show=False, Timed:bool=True, onlyFirstAndLastFrame:bool=False
 	frames_folder = saved_folder / Path("frames")
 
 	print(f"Making {N_frames} frames for video...")
+
 	print(f"Focus at approximately {x_0:.2f},{y_0:.2f}...")
+
 	print(f"Zoom from {zoom_from_radius} to {zoom_to_radius}...")
-	default_leaf_directory = frames_folder / Path(f"x_{x_0}_y_{y_0}_from_{zoom_from_radius}_to_{zoom_to_radius}/")
-	print(f"these frames will be saved in {default_leaf_directory} ...")
+
+
+	default_leaf_directory = frames_folder / Path(f"x_{x_0}_y_{y_0}_from_{str(zoom_from_radius).replace('.','p')}_to_{str(zoom_to_radius).replace('.','p')}/")
+	print(f"These frames will be saved in {default_leaf_directory} ...")
+
 	new_leaf_directory = input(f"Create unique leaf directory name? [no]: ")
 
 	if len(new_leaf_directory) > 0:
@@ -227,19 +231,19 @@ def generate_video(show=False, Timed:bool=True, onlyFirstAndLastFrame:bool=False
 		for frame in frames:	
 				#I want code to start at 0 but naming frames to start at 1
 			frame_number = frame-1 
-			frame_label= N_frames-frame_number
+			#frame_label= N_frames-frame_number
 
 			current_box_size = box_size_values[frame_number]
 			current_N_iterations = N_iter_values[frame_number]
-			filename = leaf_directory / Path(f"frame{frame_label:0>4}.png")
+			filename = leaf_directory / Path(f"frame{frame_number:0>4}.png")
 
 			calculation_time_start = time()
 			escape_time_matrix = calculate_escape_time_matrix(x_0=x_0, y_0=y_0,
 												box_size = current_box_size, 
 												N_iterations = current_N_iterations,
 												resolution = resolution)
-			print(f"{frame=: >4}/{N_frames: >4}\t{round(time()-calculation_time_start,0): >5} seconds",end="\r")
 			map_ETM_to_image(escape_time_matrix=escape_time_matrix, extent=window, filename=filename, show=False)
+			print(f"{frame=: >4}/{N_frames: >4}\t{round(time()-calculation_time_start,0): >5} seconds",end="\r")
 		print("\nFrames done! running FFmpeg command to create video...")
 		FFmpegCommand(subfolder=leaf_directory, fps=fps, resolution=resolution, Timed=Timed)
 	except KeyboardInterrupt:
@@ -257,4 +261,4 @@ def generate_video(show=False, Timed:bool=True, onlyFirstAndLastFrame:bool=False
 
 if __name__ == "__main__":
 
-	generate_video(onlyFirstAndLastFrame=True)
+	generate_video(onlyFirstAndLastFrame=False)
