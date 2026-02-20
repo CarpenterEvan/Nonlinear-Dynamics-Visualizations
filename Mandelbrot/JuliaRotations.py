@@ -34,7 +34,7 @@ def get_starting_matrix(x_i:float,
 def escape_time_for_row(args):
 		z_row, N_iterations = args
 
-		c_row = np.full(z_row.shape, complex(1,0))
+		c_row = np.full(z_row.shape, complex(1,np.sqrt(2)))
 		escape_time_row = np.zeros_like(z_row, dtype=int)
 
 		for iteration in range(N_iterations):
@@ -59,10 +59,9 @@ def in_julia(x_i:float, y_i:float, box_size:float=1,
 	'''
 	starting_matrix = get_starting_matrix(x_i=x_i, y_i=y_i, box_size=box_size, resolution=resolution)
 	z = starting_matrix
-	print(f"{z=}")
-	print(f"{z.shape=}")
+
 	escape_time_matrix =  np.full(z.shape, 0, dtype=int)
-	print(f"{escape_time_matrix=}")
+
 	if usePool:
 		with Pool(4) as pool:
 			escape_time_matrix_rows = pool.map(
