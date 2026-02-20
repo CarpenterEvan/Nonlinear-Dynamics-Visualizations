@@ -48,7 +48,7 @@ def escape_time_for_row(args):
 			# and have not been written to yet
 			condition2 = escape_time_row == 0
 
-			escape_time_row[(mask) & (condition1) & (condition2)] = iteration
+			escape_time_row[(mask) & (condition1) & (condition2)] = iteration# - np.log(np.log(np.abs(z_row[mask])))/np.log(N_iterations)
 
 		return escape_time_row
 def in_mandelbrot(x_i:float, y_i:float, box_size:float=1,
@@ -59,8 +59,9 @@ def in_mandelbrot(x_i:float, y_i:float, box_size:float=1,
 	'''
 	starting_matrix = get_starting_matrix(x_i=x_i, y_i=y_i, box_size=box_size, resolution=resolution)
 	c = starting_matrix
-	escape_time_matrix = np.zeros_like(c, dtype=int)
-
+	print(c)
+	escape_time_matrix = np.full(c.shape, complex(1,1), dtype=complex)
+	print(escape_time_matrix)
 	if usePool:
 		with Pool(4) as pool:
 			escape_time_matrix_rows = pool.map(
@@ -94,42 +95,44 @@ def plot_brot(escape_time_matrix, show:bool=True, extent:list=None, cmap:str="in
 	else:
 		print(f"Dir not found\nmkdir -p {filename.parent}")
 		os.system(f"mkdir -p {filename.parent}")
-		plt.imsave(filename, escape_time_matrix, cmap=cmap)
+	print(f"Saving image at: {filename}")
+	plt.imsave(filename, escape_time_matrix, cmap=cmap)
 	plt.close()
 
 
-def main(makeFrames:bool=False):
+def main(makeFrames:bool=False, show=False):
 	from time import time
 
-	x_i, y_i = -1.78, 0
+	x_i, y_i = 0, 0
 	# -0.8181285, 0.20082240 # near spiral, slightly too high
 	zoom_from_radius = 100
 	zoom_to_radius = 1
 	#-0.743643887037158704752191506114774, 0.131825904205311970493132056385139 suggested by copilot
 	
-	initial_N_iterations = 500#
+	N_iterations = 500 #if animiated, this is the initial number of iterations. 
+
 	smallest_size = 200
 	largest_size = 2
 
 	fps = 4
-	resolution = (1920, 1080)# 1080p
+	resolution = (1500,1500)# (1920, 1080)# 1080p
 	seconds = 10
 	N_frames = int(fps * seconds)
 
 	y_i = -y_i # so moving based on imshow coords is more intuitive
 	
 	Saved = Path(__file__).parent / Path("Saved")
-	
-	frames = np.arange(start=1,stop=N_frames+1)
 
 
 	# Experimentally paramaterizing the N_iterations and pixel density from frames
 	# TODO: Zoom for radius should be parameterized as exponential?
 	# https://stackoverflow.com/questions/47818880/
 	
+	# make lists of meta parameters	
+	frames = np.arange(start=1,stop=N_frames+1)
 	box_size_values = np.geomspace(smallest_size, largest_size, N_frames)
+	N_iter_values = (  ((N_frames-frames)**2)/N_frames + N_iterations ).astype(int)
 
-	N_iter_values = (  ((N_frames-frames)**2)/N_frames + initial_N_iterations ).astype(int)
 	#(max_N_iterations - ((max_N_iterations-50)/ N_frames) * frames).astype(int)
 
 	####################################################################################
@@ -180,11 +183,11 @@ def main(makeFrames:bool=False):
 								  		   resolution=resolution, 
 								  		   N_iterations=N_iterations)
 		
-		plot_brot(escape_time_matrix=escape_time_matrix, extent=window, show=True)
+		plot_brot(escape_time_matrix=escape_time_matrix, extent=window, show=show)
 
 	print(f"Time elapsed: {time()-start:.2f} sec")
 	
 
 
 if __name__ == "__main__":
-	main(makeFrames=True)
+	main(makeFrames=False)

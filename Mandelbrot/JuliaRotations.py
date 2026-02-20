@@ -32,9 +32,10 @@ def get_starting_matrix(x_i:float,
 	return starting_matrix
 
 def escape_time_for_row(args):
-		c_row, N_iterations = args
-		z_row = np.zeros_like(c_row)
-		escape_time_row = np.zeros_like(c_row, dtype=int)
+		z_row, N_iterations = args
+
+		c_row = np.full(z_row.shape, complex(1,0))
+		escape_time_row = np.zeros_like(z_row, dtype=int)
 
 		for iteration in range(N_iterations):
 			mask = np.abs(z_row) <= 2
@@ -49,18 +50,19 @@ def escape_time_for_row(args):
 			condition2 = escape_time_row == 0
 
 			escape_time_row[(mask) & (condition1) & (condition2)] = iteration
-
 		return escape_time_row
-def in_mandelbrot(x_i:float, y_i:float, box_size:float=1,
-                 resolution:tuple=(), N_iterations:int=20, usePool:bool=True) -> np.ndarray:
+def in_julia(x_i:float, y_i:float, box_size:float=1,
+                 resolution:tuple=(), N_iterations:int=20, usePool:bool=False) -> np.ndarray:
 	'''
 	Determine the "escape time" for each point in the complex matrix c. 
 	Escape time is how many iterations the point takes to exceed an absolute value of 2.
 	'''
 	starting_matrix = get_starting_matrix(x_i=x_i, y_i=y_i, box_size=box_size, resolution=resolution)
-	c = starting_matrix
-	escape_time_matrix = np.zeros_like(c, dtype=int)
-
+	z = starting_matrix
+	print(f"{z=}")
+	print(f"{z.shape=}")
+	escape_time_matrix =  np.full(z.shape, 0, dtype=int)
+	print(f"{escape_time_matrix=}")
 	if usePool:
 		with Pool(4) as pool:
 			escape_time_matrix_rows = pool.map(
@@ -69,14 +71,14 @@ def in_mandelbrot(x_i:float, y_i:float, box_size:float=1,
 			)
 		escape_time_matrix = np.array(escape_time_matrix_rows)
 	else:
-		for i in range(c.shape[1]):
-			c_row = c[i]
-			args = (c_row, N_iterations)
+		for i in range(z.shape[1]):
+			z_row = z[i]
+			args = (z_row, N_iterations)
 			escape_time_matrix[i] = escape_time_for_row(args)
 
 	return escape_time_matrix
 
-def plot_brot(escape_time_matrix, show:bool=True, extent:list=None, cmap:str="inferno", norm=PowerNorm(0.5), filename:Path=Path("test.png")):
+def plot_set(escape_time_matrix, show:bool=True, extent:list=None, cmap:str="inferno", norm=PowerNorm(1), filename:Path=Path("test.png")):
 	'''
 	Plotting commands for the Mandelbrot set
 	'''
@@ -89,53 +91,47 @@ def plot_brot(escape_time_matrix, show:bool=True, extent:list=None, cmap:str="in
 	# I don't want to save the image with the axes.
 	plt.axis('off')
 
-	if os.path.exists(filename.parent):
-		plt.imsave(filename, escape_time_matrix, cmap=cmap)
-	else:
-		print(f"Dir not found\nmkdir -p {filename.parent}")
+	if not os.path.exists(filename.parent):
+		print(f"Dir not found\nmkdir -p {filename.parent} ...")
 		os.system(f"mkdir -p {filename.parent}")
-		plt.imsave(filename, escape_time_matrix, cmap=cmap)
+	print(f"Saving image at: {filename}")
+	plt.imsave(filename, escape_time_matrix, cmap=cmap)
 	plt.close()
 
 
-def main(makeFrames:bool=False):
+def main(makeFrames:bool=False, show=False):
 	from time import time
 
-	x_i, y_i = -1.78, 0
+	x_i, y_i = 0, 0
 	# -0.8181285, 0.20082240 # near spiral, slightly too high
-	zoom_from_radius = 100
-	zoom_to_radius = 1
 	#-0.743643887037158704752191506114774, 0.131825904205311970493132056385139 suggested by copilot
 	
-	initial_N_iterations = 500#
+	initial_N_iterations = 300#
 	smallest_size = 200
 	largest_size = 2
 
 	fps = 4
-	resolution = (1920, 1080)# 1080p
+	resolution = (2000,2000) #(1920, 1080)# 1080p
 	seconds = 10
 	N_frames = int(fps * seconds)
 
-	y_i = -y_i # so moving based on imshow coords is more intuitive
+	y_i = -y_i # so that moving the center of focus can be based on imshow coords, which is more intuitive
 	
 	Saved = Path(__file__).parent / Path("Saved")
 	
+	# make lists of meta parameters	
 	frames = np.arange(start=1,stop=N_frames+1)
-
-
-	# Experimentally paramaterizing the N_iterations and pixel density from frames
-	# TODO: Zoom for radius should be parameterized as exponential?
-	# https://stackoverflow.com/questions/47818880/
-	
 	box_size_values = np.geomspace(smallest_size, largest_size, N_frames)
-
 	N_iter_values = (  ((N_frames-frames)**2)/N_frames + initial_N_iterations ).astype(int)
+
 	#(max_N_iterations - ((max_N_iterations-50)/ N_frames) * frames).astype(int)
 
+
+
 	####################################################################################
-	start = time()
+	start_time = time()
 	if makeFrames:
-		subfolder = Saved / Path(f"frames/single_zoom/experiment/x{x_i}_y{y_i}_geomspace_different_speeds")
+		subfolder = Saved / Path(f"frames/JuliaRotations/x{x_i}_y{y_i}")
 		loopstart = time()
 		try:
 			for frame in frames:
@@ -146,7 +142,7 @@ def main(makeFrames:bool=False):
 
 				
 				start = time()
-				escape_time_matrix = in_mandelbrot(x_i=x_i, 
+				escape_time_matrix = in_julia(x_i=x_i, 
 												   y_i=y_i,
 												   box_size=box_size, 
 												   resolution=resolution, 
@@ -155,7 +151,7 @@ def main(makeFrames:bool=False):
 				print(f"{frame=: >3}/{N_frames: >3}\t{round(time()-start,1): >5} seconds",end="\r")
 
 				filename = subfolder / Path(f"frame{frame_label_index:0>4}.png")
-				plot_brot(escape_time_matrix=escape_time_matrix, extent=window, filename=filename, show=False)
+				plot_set(escape_time_matrix=escape_time_matrix, extent=window, filename=filename, show=False)
 			
 			os.system(f"ffmpeg -r {fps}\
 			 			-y\
@@ -174,17 +170,17 @@ def main(makeFrames:bool=False):
 	else: 
 		box_size = box_size_values[0]
 		N_iterations = N_iter_values[0]
-		escape_time_matrix = in_mandelbrot(x_i=x_i, 
+		escape_time_matrix = in_julia(x_i=x_i, 
 								  		   y_i=y_i,
 								  		   box_size=min(smallest_size,largest_size), 
 								  		   resolution=resolution, 
 								  		   N_iterations=N_iterations)
 		
-		plot_brot(escape_time_matrix=escape_time_matrix, extent=window, show=True)
-
-	print(f"Time elapsed: {time()-start:.2f} sec")
+		plot_set(escape_time_matrix=escape_time_matrix, extent=window, show=show)
+	end_time = time()
+	print(f"Time elapsed: {end_time-start_time:.2f} sec")
 	
 
 
 if __name__ == "__main__":
-	main(makeFrames=True)
+	main(makeFrames=False, show=False)
