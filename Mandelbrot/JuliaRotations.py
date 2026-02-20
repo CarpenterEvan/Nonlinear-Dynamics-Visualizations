@@ -76,7 +76,7 @@ def in_mandelbrot(x_i:float, y_i:float, box_size:float=1,
 
 	return escape_time_matrix
 
-def plot_brot(escape_time_matrix, show:bool=True, extent:list=None, cmap:str="inferno", norm=PowerNorm(1), filename:Path=Path("test.png")):
+def plot_brot(escape_time_matrix, show:bool=True, extent:list=None, cmap:str="inferno", norm=PowerNorm(0.5), filename:Path=Path("test.png")):
 	'''
 	Plotting commands for the Mandelbrot set
 	'''
@@ -100,15 +100,20 @@ def plot_brot(escape_time_matrix, show:bool=True, extent:list=None, cmap:str="in
 
 def main(makeFrames:bool=False):
 	from time import time
+
 	x_i, y_i = -1.78, 0
 	# -0.8181285, 0.20082240 # near spiral, slightly too high
-	initial_N_iterations = 300#
-	smallest_size = 0.0001
+	zoom_from_radius = 100
+	zoom_to_radius = 1
+	#-0.743643887037158704752191506114774, 0.131825904205311970493132056385139 suggested by copilot
+	
+	initial_N_iterations = 500#
+	smallest_size = 200
 	largest_size = 2
 
-	fps = 24
+	fps = 4
 	resolution = (1920, 1080)# 1080p
-	seconds = 20
+	seconds = 10
 	N_frames = int(fps * seconds)
 
 	y_i = -y_i # so moving based on imshow coords is more intuitive
@@ -142,10 +147,10 @@ def main(makeFrames:bool=False):
 				
 				start = time()
 				escape_time_matrix = in_mandelbrot(x_i=x_i, 
-												y_i=y_i,
-												box_size=box_size, 
-												resolution=resolution, 
-												N_iterations=N_iterations)
+												   y_i=y_i,
+												   box_size=box_size, 
+												   resolution=resolution, 
+												   N_iterations=N_iterations)
 				
 				print(f"{frame=: >3}/{N_frames: >3}\t{round(time()-start,1): >5} seconds",end="\r")
 
@@ -171,7 +176,7 @@ def main(makeFrames:bool=False):
 		N_iterations = N_iter_values[0]
 		escape_time_matrix = in_mandelbrot(x_i=x_i, 
 								  		   y_i=y_i,
-								  		   box_size=smallest_size, 
+								  		   box_size=min(smallest_size,largest_size), 
 								  		   resolution=resolution, 
 								  		   N_iterations=N_iterations)
 		
