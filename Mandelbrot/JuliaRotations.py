@@ -5,7 +5,6 @@ from matplotlib.colors import PowerNorm, LogNorm
 from multiprocessing import Pool
 from pathlib import Path	
 
-
 def get_starting_matrix(x_i:float, 
 						y_i:float, 
 						box_size:float=1,

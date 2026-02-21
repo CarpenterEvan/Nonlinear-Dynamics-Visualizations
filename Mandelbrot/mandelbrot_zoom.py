@@ -4,11 +4,13 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import PowerNorm, LogNorm
 from multiprocessing import Pool
 from pathlib import Path
-from time import time
+
+from time import time, sleep
 from PIL import Image
 import sys
 
 saved_folder = Path(__file__).parent / Path("Saved")
+frames_folder = saved_folder / Path("frames")
 
 def get_starting_matrix(x_0:float, 
 						y_0:float, 
@@ -92,7 +94,7 @@ def map_ETM_to_image(escape_time_matrix,
 	Maps the escape time matrix (ETM) to an image using `matplotlib.pyplot.imshow`
 	'''
 	plt.figure()
-	plt.imshow(escape_time_matrix, interpolation="spline36", extent=extent, cmap=cmap, norm=norm)
+	plt.imshow(escape_time_matrix, origin="lower", interpolation="spline36", extent=extent, cmap=cmap, norm=norm)
 	plt.gca().set_aspect("equal")
 	plt.tight_layout()
 	if show:
@@ -130,7 +132,7 @@ def FFmpegCommand(subfolder:Path, fps:int=24, resolution:tuple=(1920,1800), Time
 						-vcodec libx264\
 						-crf 18\
 						-pix_fmt yuv420p\
-						{subfolder}/mandelbrot_linear_parameterization.mp4"
+						{subfolder}/mandelbrot.mp4"
 	os.system(ffmpeg_command)
 
 	if Timed:
@@ -138,45 +140,41 @@ def FFmpegCommand(subfolder:Path, fps:int=24, resolution:tuple=(1920,1800), Time
 		print(f"\nTotal time elapsed by FFmpeg: {FFmpeg_end_time-FFmpeg_start_time:.1f} seconds")
 
 def generate_video(show=False, Timed:bool=True, onlyFirstAndLastFrame:bool=False):	
-# **** Image Parameters ****
-	x_0, y_0 = 0, 0 #Focus point.
+	# **** Image Parameters ****
+	#Focus point.
+	x_0, y_0 = -0.10109596,0.95628694#1.84302*10**(-5), -1.0000105309
+		#-0.8181285, 0.20010001
 		# -0.8181285, 0.20082240 # near spiral, slightly too high
 		#-0.743643887037158704752191506114774, 0.131825904205311970493132056385139 suggested by copilot for some reason
 
-	y_0 = -y_0 #This means moving the focus based on the imshow coords is more intuitive.
-	N_iterations = 500 
-# ~❦~❦ Video Parameters ~❦~❦
+	
+	N_iterations = 40 
+
+	# ~❦~❦ Video Parameters ~❦~❦
 
 	# Zoom radius
-	zoom_from_radius = 2
-	zoom_to_radius = 3
-	resolution = (1500,1500)# (1920, 1080)# 1080p
-	seconds = 5
-	fps = 4
+	zoom_from_radius = 1
+	zoom_to_radius = 1/6000
+	resolution = (1920, 1080)# 1080p
+	seconds = 10
+	fps = 24
 	N_frames = int(seconds * fps)
 	frames = np.arange(start=1,stop=N_frames+1)
 
 	# Transformations of parameters
-	N_iter_values = (  ((N_frames-frames)**2)/N_frames + N_iterations ).astype(int)
+	
+	box_size_values = np.geomspace(zoom_from_radius, zoom_to_radius, N_frames)
 		# If animiated, N_iterations is the initial number of iterations. 
 		# The N_iterations will change as a function of the frame number as:
-	box_size_values = np.geomspace(zoom_from_radius, zoom_to_radius, N_frames)
+	N_iter_values = (1/(10*box_size_values)**(1/2)+N_iterations).astype(int)#(  ( (frames)**2 ) / N_frames + N_iterations ).astype(int)
 
 		# Experimentally paramaterizing the N_iterations and pixel density from frames
 		# TODO: Zoom for radius should be parameterized as exponential?
 		# https://stackoverflow.com/questions/47818880/
-# File making
+	# File making
 	total_time_start = time() if Timed else None
-	
-	frames_folder = saved_folder / Path("frames")
-
-	print(f"Making {N_frames} frames for video...")
-
 	print(f"Focus at approximately {x_0:.2f},{y_0:.2f}...")
-
-	print(f"Zoom from {zoom_from_radius} to {zoom_to_radius}...")
-
-
+	sleep(2)
 	default_leaf_directory = frames_folder / Path(f"x_{x_0}_y_{y_0}_from_{str(zoom_from_radius).replace('.','p')}_to_{str(zoom_to_radius).replace('.','p')}/")
 	print(f"These frames will be saved in {default_leaf_directory} ...")
 
@@ -184,28 +182,33 @@ def generate_video(show=False, Timed:bool=True, onlyFirstAndLastFrame:bool=False
 
 	if len(new_leaf_directory) > 0:
 		leaf_directory = frames_folder / new_leaf_directory
-	elif len(new_leaf_directory) == 0:
+	elif (len(new_leaf_directory) == 0) or (new_leaf_directory.lower() == "no") or (new_leaf_directory.lower() == "n"):
 		leaf_directory = default_leaf_directory
 	else:
 		print("I'm not sure how you got here...")
 		leaf_directory = default_leaf_directory
-# Option to just make frames
+	# Option to just make frames
 	if onlyFirstAndLastFrame:
 		image_paths = []
 		for index in (0,-1):
+
 			box_size = box_size_values[index]
-			N_iterations = N_iter_values[index]
+			N_iterations = N_iter_values[index]#-100*(-index)
+
+			frame_name = "First" if index == 0 else "Last"
+			print(f"{frame_name} frame has Radius {box_size} and {N_iterations} iterations.")
+
 			test_frame = leaf_directory / Path(f"test_frame_{index}.png")
+
 			escape_time_matrix = calculate_escape_time_matrix(x_0=x_0, 
 											y_0=y_0,
 											box_size=box_size, 
 											resolution=resolution, 
 											N_iterations=N_iterations)
-		
 			tmp_image = map_ETM_to_image(escape_time_matrix=escape_time_matrix, 
 							extent=window, 
 							show=show, 
-							filename=test_frame)
+							filename=test_frame, norm=PowerNorm(0.6))
 			image_paths.append(tmp_image)
 
 		PILImages = [Image.open(i) for i in image_paths]
@@ -225,13 +228,16 @@ def generate_video(show=False, Timed:bool=True, onlyFirstAndLastFrame:bool=False
 			image.close()
 			os.system(f"rm {image.filename}")
 		return print(f"Image saved at {combined_image_filename}")
-# Main video loop
+	# Main video loop
 	try:
+		print(f"Making {N_frames} frames for video...")
+		sleep(2)
+		print(f"Zoom from {zoom_from_radius} to {zoom_to_radius}...")
+		sleep(2)
 		# Main frame-making loop
 		for frame in frames:	
-				#I want code to start at 0 but naming frames to start at 1
-			frame_number = frame-1 
-			#frame_label= N_frames-frame_number
+			#I want code to start at 0 but naming frames to start at 1
+			frame_number = frame-1
 
 			current_box_size = box_size_values[frame_number]
 			current_N_iterations = N_iter_values[frame_number]
@@ -249,10 +255,7 @@ def generate_video(show=False, Timed:bool=True, onlyFirstAndLastFrame:bool=False
 	except KeyboardInterrupt:
 		print("Ketboard Interrupt. Exiting...")
 		exit()
-
-
-	
-
+		
 	if Timed:
 		total_time_end = time()
 		print(f"Time elapsed: {total_time_end-total_time_start:.2f} sec")
@@ -260,5 +263,4 @@ def generate_video(show=False, Timed:bool=True, onlyFirstAndLastFrame:bool=False
 
 
 if __name__ == "__main__":
-
-	generate_video(onlyFirstAndLastFrame=False)
+	generate_video(onlyFirstAndLastFrame=True, show=False)
